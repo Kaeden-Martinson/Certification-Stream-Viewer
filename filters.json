@@ -1,0 +1,7 @@
+{
+  "tlds": [],
+  "include": [],
+  "exclude": [],
+  "lookupAge": true,
+  "maxAgeDays": 30
+}

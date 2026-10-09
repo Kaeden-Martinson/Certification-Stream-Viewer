@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cert Stream Viewer</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #e3e6eb; --text: #16181d; --muted: #667085;
+    --accent: #2457d6; --accent-soft: #e8eefc; --good: #137a43; --good-soft: #e3f5ea;
+    --warn: #9a6200; --warn-soft: #fdf1dc; --bad: #9aa1ad; --bad-soft: #f0f1f4; --new: #c2410c; --new-soft: #fdeadf;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --panel: #171a20; --line: #2a2f38; --text: #e8eaee; --muted: #8b93a1;
+      --accent: #7aa2ff; --accent-soft: #1d2740; --good: #4ade80; --good-soft: #13291d;
+      --warn: #fbbf24; --warn-soft: #2e2512; --bad: #6b7280; --bad-soft: #1d2026; --new: #fb923c; --new-soft: #33200f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; gap: 24px; padding: 0 20px; height: 56px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: .2px; }
+  nav { display: flex; gap: 4px; height: 100%; }
+  nav button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 0 12px; cursor: pointer; }
+  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+  .status { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
+  .dot.on { background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
+  main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+  .view { display: none; } .view.active { display: block; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  input[type=text], input[type=number], textarea, select { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+  textarea { resize: vertical; min-height: 64px; }
+  input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  button.btn { font: inherit; font-weight: 600; border-radius: 6px; padding: 7px 14px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  @media (prefers-color-scheme: dark) { button.btn.primary { color: #0f1115; } }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .row > * { flex: 1 1 160px; }
+  .row > .shrink { flex: 0 0 auto; }
+  .check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); font-weight: 500; margin: 0; white-space: nowrap; }
+  .counters { display: flex; gap: 28px; flex-wrap: wrap; }
+  .counter b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .counter span { color: var(--muted); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.domain { font-family: var(--mono); width: 100%; white-space: normal; word-break: break-all; }
+  td.domain a { color: var(--text); text-decoration: none; }
+  td.domain a:hover { color: var(--accent); text-decoration: underline; }
+  td.muted { color: var(--muted); }
+  tr.fresh td { animation: flash 1.2s ease-out; }
+  @keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: var(--bad-soft); color: var(--muted); }
+  .badge.new { background: var(--new-soft); color: var(--new); }
+  .badge.good { background: var(--good-soft); color: var(--good); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .table-wrap { max-height: calc(100vh - 330px); min-height: 300px; overflow: auto; border-top: 1px solid var(--line); margin: 12px -16px -16px; }
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
+  a.small { font-size: 12px; color: var(--accent); }
+
+  /* Name finder */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .tld-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tld-picks label { margin: 0; display: inline-flex; gap: 4px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-family: var(--mono); color: var(--text); font-weight: 500; cursor: pointer; }
+  .tld-picks input:checked + span { color: var(--accent); font-weight: 700; }
+  .results { display: flex; flex-direction: column; }
+  .name-row { display: grid; grid-template-columns: minmax(160px, 260px) 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .name-row:last-child { border-bottom: 0; }
+  .name-row .nm { font-family: var(--mono); font-weight: 700; font-size: 15px; }
+  .name-row .why { color: var(--muted); font-size: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+  .chip { position: relative; font-family: var(--mono); font-size: 12px; border-radius: 6px; padding: 4px 8px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); }
+  .chip.available { background: var(--good-soft); border-color: transparent; color: var(--good); font-weight: 700; cursor: pointer; }
+  .chip.likely-available { background: var(--warn-soft); border-color: transparent; color: var(--warn); font-weight: 700; cursor: pointer; }
+  .chip.registered { text-decoration: line-through; }
+  .chip.pending { opacity: .6; }
+  .buy { display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 10; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; min-width: 170px; box-shadow: 0 8px 24px rgba(0,0,0,.15); font-family: system-ui, sans-serif; }
+  .chip.open .buy { display: block; }
+  .buy a { display: block; padding: 5px 8px; border-radius: 4px; color: var(--text); text-decoration: none; font-weight: 500; }
+  .buy a:hover { background: var(--accent-soft); }
+  .buy .hint { font-size: 11px; color: var(--muted); padding: 4px 8px; font-weight: 400; }
+  .notice { padding: 8px 12px; border-radius: 6px; background: var(--warn-soft); color: var(--warn); margin-bottom: 12px; font-size: 13px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .check-result { margin-top: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cert Stream Viewer</h1>
+  <nav>
+    <button class="active" data-view="feed">Live feed</button>
+    <button data-view="names">Name finder</button>
+  </nav>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
+</header>
+
+<main>
+  <!-- LIVE FEED -->
+  <section class="view active" id="feed">
+    <div class="panel">
+      <div class="row">
+        <div><label for="fTlds">TLDs (blank = all)</label><input type="text" id="fTlds" placeholder="com, io, ai"></div>
+        <div><label for="fInclude">Domain contains</label><input type="text" id="fInclude" placeholder="shop, ai, crypto"></div>
+        <div><label for="fExclude">Exclude</label><input type="text" id="fExclude" placeholder="test, staging"></div>
+        <div class="shrink" style="flex-basis:110px"><label for="fMaxAge">"New" = ≤ days</label><input type="number" id="fMaxAge" min="1" value="30"></div>
+        <label class="check shrink"><input type="checkbox" id="fLookup" checked> Look up registration date</label>
+        <button class="btn shrink" id="saveFilters">Apply</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:center">
+        <div class="counters" style="flex:1 1 auto">
+          <div class="counter"><b id="cCerts">0</b><span>certificates read</span></div>
+          <div class="counter"><b id="cDomains">0</b><span>unique domains</span></div>
+          <div class="counter"><b id="cMatched">0</b><span>matched filters</span></div>
+          <div class="counter"><b id="cNew">0</b><span>newly registered</span></div>
+        </div>
+        <label class="check shrink"><input type="checkbox" id="onlyNew"> Only newly registered</label>
+        <div class="shrink" style="flex-basis:200px"><input type="text" id="search" placeholder="Search feed…"></div>
+        <button class="btn shrink" id="pauseBtn">Pause view</button>
+        <button class="btn shrink" id="toggleStream">Stop stream</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Seen</th><th>Domain</th><th>Registered</th><th>Issuer</th><th></th></tr></thead>
+          <tbody id="feedBody"></tbody>
+        </table>
+        <div class="empty" id="feedEmpty">Waiting for certificates…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- NAME FINDER -->
+  <section class="view" id="names">
+    <div class="panel">
+      <div class="grid2">
+        <div>
+          <label for="seed">Names you like</label>
+          <input type="text" id="seed" placeholder="e.g. Stripe, Notion, Loom">
+        </div>
+        <div>
+          <label for="style">Theme / style (optional)</label>
+          <input type="text" id="style" placeholder="e.g. playful, one word, sounds Japanese, nature-inspired">
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <label for="desc">What does your company / product do?</label>
+        <textarea id="desc" placeholder="e.g. An app that helps freelancers track invoices and get paid faster"></textarea>
+      </div>
+      <div style="margin-top:12px">
+        <label>Extensions to check</label>
+        <div class="tld-picks" id="tldPicks"></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <div class="shrink" style="flex-basis:260px">
+          <label for="engine">Generator</label>
+          <select id="engine">
+            <option value="claude">Claude (creative, needs API key)</option>
+            <option value="classic">Built-in (instant, offline)</option>
+          </select>
+        </div>
+        <div class="shrink" style="flex-basis:100px"><label for="count">How many</label><input type="number" id="count" value="40" min="5" max="80"></div>
+        <button class="btn primary shrink" id="generate">Generate &amp; check</button>
+        <label class="check shrink"><input type="checkbox" id="onlyAvail"> Only show names with an open domain</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <div><label for="manual">Check a specific domain</label><input type="text" id="manual" placeholder="mycoolstartup.com"></div>
+        <button class="btn shrink" id="manualBtn">Check</button>
+      </div>
+      <div class="check-result" id="manualResult"></div>
+    </div>
+
+    <div class="panel" id="resultsPanel" hidden>
+      <div class="row" style="align-items:center;margin-bottom:8px">
+        <div style="flex:1 1 auto"><b id="resultsTitle">Results</b></div>
+        <div class="legend shrink">
+          <span><span class="badge good">available</span> click to buy</span>
+          <span><span class="badge warn">likely</span> no RDAP; DNS says unused</span>
+          <span><span class="badge">taken</span></span>
+        </div>
+      </div>
+      <div id="warning"></div>
+      <div class="results" id="results"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => n.toLocaleString();
+
+// ---------- tabs ----------
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === b.dataset.view));
+  try { localStorage.setItem('tab', b.dataset.view); } catch {}
+});
+try { const t = localStorage.getItem('tab'); if (t) document.querySelector(`nav button[data-view="${t}"]`)?.click(); } catch {}
+
+// ---------- live feed ----------
+const MAX_ROWS = 500;
+const rows = new Map(); // domain -> { item, tr }
+let paused = false;
+let streamRunning = true;
+
+function ageCell(item) {
+  switch (item.age) {
+    case 'pending': return '<span class="badge">checking…</span>';
+    case 'skipped': return '<span class="badge" title="Lookup skipped: too many queued">—</span>';
+    case 'off': return '';
+    case 'unknown': return '<span class="badge">unknown</span>';
+    case 'known': {
+      const d = item.ageDays;
+      const label = d === 0 ? 'today' : d < 60 ? `${d}d ago` : d < 730 ? `${Math.round(d / 30)}mo ago` : `${Math.round(d / 365)}y ago`;
+      return `<span class="badge ${item.isNew ? 'new' : ''}" title="${esc(item.created)}">${item.isNew ? 'NEW · ' : ''}${label}</span>`;
+    }
+  }
+  return '';
+}
+
+function visible(item) {
+  if ($('onlyNew').checked && !item.isNew) return false;
+  const q = $('search').value.trim().toLowerCase();
+  return !q || item.domain.includes(q);
+}
+
+function renderRow(item, fresh) {
+  const tr = document.createElement('tr');
+  if (fresh) tr.className = 'fresh';
+  tr.innerHTML = `
+    <td class="muted">${new Date(item.seenAt).toLocaleTimeString()}</td>
+    <td class="domain"><a href="https://${esc(item.domain)}" target="_blank" rel="noopener noreferrer">${esc(item.domain)}</a></td>
+    <td class="age">${ageCell(item)}</td>
+    <td class="muted">${esc(item.issuer)}</td>
+    <td><a class="small" href="https://crt.sh/?q=${encodeURIComponent(item.domain)}" target="_blank" rel="noopener noreferrer">certs</a></td>`;
+  tr.hidden = !visible(item);
+  return tr;
+}
+
+function addItem(item, fresh = true) {
+  if (rows.has(item.domain)) return;
+  const tr = renderRow(item, fresh);
+  rows.set(item.domain, { item, tr });
+  if (!paused) $('feedBody').prepend(tr);
+  if (rows.size > MAX_ROWS) {
+    const [oldest, { tr: old }] = rows.entries().next().value;
+    old.remove();
+    rows.delete(oldest);
+  }
+  $('feedEmpty').hidden = true;
+}
+
+function applyView() {
+  for (const { item, tr } of rows.values()) tr.hidden = !visible(item);
+}
+$('onlyNew').onchange = applyView;
+$('search').oninput = applyView;
+
+$('pauseBtn').onclick = () => {
+  paused = !paused;
+  $('pauseBtn').textContent = paused ? 'Resume view' : 'Pause view';
+  if (!paused) {
+    const body = $('feedBody');
+    body.innerHTML = '';
+    [...rows.values()].reverse().forEach(({ tr }) => body.appendChild(tr));
+  }
+};
+
+$('toggleStream').onclick = async () => {
+  const url = streamRunning ? '/api/feed/stop' : '/api/feed/start';
+  const res = await fetch(url, { method: 'POST' });
+  if (!res.ok) { const e = await res.json(); alert(e.error); return; }
+  refreshStats();
+};
+
+function connectFeed() {
+  const es = new EventSource('/api/feed');
+  es.addEventListener('backlog', e => JSON.parse(e.data).forEach(i => addItem(i, false)));
+  es.addEventListener('domain', e => addItem(JSON.parse(e.data)));
+  es.addEventListener('age', e => {
+    const a = JSON.parse(e.data);
+    const row = rows.get(a.domain);
+    if (!row) return;
+    Object.assign(row.item, a);
+    row.tr.querySelector('.age').innerHTML = ageCell(row.item);
+    row.tr.hidden = !visible(row.item);
+  });
+  es.onerror = () => { $('statusText').textContent = 'Disconnected — retrying…'; $('dot').classList.remove('on'); };
+}
+connectFeed();
+
+async function refreshStats() {
+  try {
+    const s = await (await fetch('/api/feed/stats')).json();
+    streamRunning = s.running;
+    $('cCerts').textContent = fmt(s.certs);
+    $('cDomains').textContent = fmt(s.domains);
+    $('cMatched').textContent = fmt(s.matched);
+    $('cNew').textContent = fmt(s.newlyRegistered);
+    $('dot').classList.toggle('on', s.running);
+    const healthy = s.logs.filter(l => l.healthy).length;
+    $('statusText').textContent = s.running ? `Streaming ${healthy}/${s.logs.length} CT logs` : 'Stream stopped';
+    $('toggleStream').textContent = s.running ? 'Stop stream' : 'Start stream';
+  } catch {}
+}
+refreshStats();
+setInterval(refreshStats, 2000);
+
+async function loadFilters() {
+  const f = await (await fetch('/api/filters')).json();
+  $('fTlds').value = f.tlds.join(', ');
+  $('fInclude').value = f.include.join(', ');
+  $('fExclude').value = f.exclude.join(', ');
+  $('fMaxAge').value = f.maxAgeDays;
+  $('fLookup').checked = f.lookupAge;
+}
+loadFilters();
+
+$('saveFilters').onclick = async () => {
+  await fetch('/api/filters', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tlds: $('fTlds').value, include: $('fInclude').value, exclude: $('fExclude').value,
+      maxAgeDays: $('fMaxAge').value, lookupAge: $('fLookup').checked,
+    }),
+  });
+  $('saveFilters').textContent = 'Applied ✓';
+  setTimeout(() => $('saveFilters').textContent = 'Apply', 1200);
+};
+
+// ---------- name finder ----------
+const TLDS = ['com', 'io', 'ai', 'co', 'app', 'dev', 'net', 'org', 'xyz', 'so', 'gg', 'tech'];
+const DEFAULT_TLDS = ['com', 'io', 'ai', 'co'];
+$('tldPicks').innerHTML = TLDS.map(t =>
+  `<label><input type="checkbox" value="${t}" ${DEFAULT_TLDS.includes(t) ? 'checked' : ''} hidden><span>.${t}</span></label>`).join('');
+
+// small client-side concurrency pool for availability checks
+function pool(limit) {
+  let active = 0; const q = [];
+  const next = () => { if (active >= limit || !q.length) return; active++; const { fn, res } = q.shift(); fn().then(res).finally(() => { active--; next(); }); };
+  return fn => new Promise(res => { q.push({ fn, res }); next(); });
+}
+const checkPool = pool(6);
+let runId = 0;
+
+function chipHTML(domain, r) {
+  const status = r ? r.status : 'pending';
+  const cls = { available: 'available', 'likely-available': 'likely-available', registered: 'registered', unknown: 'unknown', pending: 'pending' }[status] || 'unknown';
+  let title = status;
+  if (r?.created) title = `Registered ${new Date(r.created).toLocaleDateString()}`;
+  let menu = '';
+  if (r && (status === 'available' || status === 'likely-available')) {
+    menu = `<div class="buy">${status === 'likely-available' ? '<div class="hint">Not confirmed — verify at checkout</div>' : ''}
+      ${r.links.map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">Buy on ${esc(l.name)} ↗</a>`).join('')}</div>`;
+  }
+  return `<span class="chip ${cls}" data-domain="${esc(domain)}" title="${esc(title)}">${esc(domain)}${menu}</span>`;
+}
+
+document.addEventListener('click', e => {
+  const chip = e.target.closest('.chip.available, .chip.likely-available');
+  document.querySelectorAll('.chip.open').forEach(c => c !== chip && c.classList.remove('open'));
+  if (chip && !e.target.closest('.buy')) chip.classList.toggle('open');
+});
+
+async function check(domain) {
+  const res = await fetch('/api/check/' + encodeURIComponent(domain));
+  return res.json();
+}
+
+function updateRowVisibility(row) {
+  const open = row.querySelector('.chip.available, .chip.likely-available');
+  const done = !row.querySelector('.chip.pending');
+  row.hidden = $('onlyAvail').checked && done && !open;
+}
+$('onlyAvail').onchange = () => document.querySelectorAll('.name-row').forEach(updateRowVisibility);
+
+$('generate').onclick = async () => {
+  const tlds = [...document.querySelectorAll('#tldPicks input:checked')].map(i => i.value);
+  if (!tlds.length) return alert('Pick at least one extension');
+  const btn = $('generate');
+  btn.disabled = true; btn.textContent = 'Generating…';
+  const myRun = ++runId;
+  $('resultsPanel').hidden = false;
+  $('results').innerHTML = '<div class="empty">Coming up with names…</div>';
+  $('warning').innerHTML = '';
+  try {
+    const res = await fetch('/api/names', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seed: $('seed').value, description: $('desc').value, style: $('style').value, engine: $('engine').value, count: $('count').value }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    if (data.warning) $('warning').innerHTML = `<div class="notice">${esc(data.warning)}</div>`;
+    $('resultsTitle').textContent = `${data.names.length} names × ${tlds.length} extensions`;
+    $('results').innerHTML = data.names.map(n => `
+      <div class="name-row">
+        <div><div class="nm">${esc(n.name)}</div><div class="why">${esc(n.rationale)}</div></div>
+        <div class="chips">${tlds.map(t => chipHTML(`${n.name}.${t}`)).join('')}</div>
+      </div>`).join('');
+    btn.textContent = 'Checking availability…';
+    const jobs = [];
+    for (const chip of document.querySelectorAll('#results .chip')) {
+      const domain = chip.dataset.domain;
+      jobs.push(checkPool(() => check(domain)).then(r => {
+        if (myRun !== runId) return;
+        const fresh = document.createElement('div');
+        fresh.innerHTML = chipHTML(domain, r);
+        const row = chip.closest('.name-row');
+        chip.replaceWith(fresh.firstElementChild);
+        updateRowVisibility(row);
+      }));
+    }
+    await Promise.all(jobs);
+    if (myRun === runId) {
+      const open = document.querySelectorAll('#results .chip.available').length;
+      const likely = document.querySelectorAll('#results .chip.likely-available').length;
+      $('resultsTitle').textContent = `${data.names.length} names · ${open} available${likely ? ` · ${likely} likely available` : ''}`;
+    }
+  } catch (err) {
+    $('results').innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+  } finally {
+    if (myRun === runId) { btn.disabled = false; btn.textContent = 'Generate & check'; }
+  }
+};
+
+$('manualBtn').onclick = async () => {
+  let d = $('manual').value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (!d) return;
+  if (!d.includes('.')) d += '.com';
+  $('manualResult').innerHTML = '<span class="badge">checking…</span>';
+  const r = await check(d);
+  if (r.error) { $('manualResult').innerHTML = `<span class="badge">${esc(r.error)}</span>`; return; }
+  const label = { available: 'Available', 'likely-available': 'Likely available (unconfirmed)', registered: 'Taken', unknown: 'Unknown' }[r.status];
+  $('manualResult').innerHTML = `${chipHTML(d, r)} <span class="muted" style="margin-left:8px">${label}${r.created ? ` · registered ${new Date(r.created).toLocaleDateString()}` : ''}${r.expires ? ` · expires ${new Date(r.expires).toLocaleDateString()}` : ''}</span>
+    · <a class="small" href="${esc(r.certsUrl)}" target="_blank" rel="noopener noreferrer">certificate history</a>`;
+};
+$('manual').onkeydown = e => { if (e.key === 'Enter') $('manualBtn').click(); };
+</script>
+</body>
+</html>
