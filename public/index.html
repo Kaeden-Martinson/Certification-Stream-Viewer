@@ -4,272 +4,527 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cert Stream Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <style>
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --line: #e3e6eb; --text: #16181d; --muted: #667085;
-    --accent: #2457d6; --accent-soft: #e8eefc; --good: #137a43; --good-soft: #e3f5ea;
-    --warn: #9a6200; --warn-soft: #fdf1dc; --bad: #9aa1ad; --bad-soft: #f0f1f4; --new: #c2410c; --new-soft: #fdeadf;
-    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --ink: #1a1a1a; --ink-2: #4a4f57; --ink-3: #6b7280;
+    --surface: #ffffff; --sunken: #f7f7f8;
+    --line: #e5e5e5; --line-strong: #d4d4d4;
+    --ok: #1f7a43; --ok-bg: #eaf6ee; --warn: #8a6d1f; --warn-bg: #fdf6e3;
+    --danger: #b3261e; --danger-bg: #fdeceb; --info: #1d4e89; --info-bg: #eaf0f8;
+    --sans: 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0f1115; --panel: #171a20; --line: #2a2f38; --text: #e8eaee; --muted: #8b93a1;
-      --accent: #7aa2ff; --accent-soft: #1d2740; --good: #4ade80; --good-soft: #13291d;
-      --warn: #fbbf24; --warn-soft: #2e2512; --bad: #6b7280; --bad-soft: #1d2026; --new: #fb923c; --new-soft: #33200f;
+    :root:not([data-theme="light"]) {
+      --ink: #e9eaec; --ink-2: #a8afba; --ink-3: #7d8592;
+      --surface: #0f1115; --sunken: #15181e;
+      --line: #262b33; --line-strong: #363c46;
+      --ok: #4ade80; --ok-bg: #10231a; --warn: #e8c56a; --warn-bg: #241f10;
+      --danger: #f87171; --danger-bg: #2a1416; --info: #7fb3e8; --info-bg: #111d2b;
+      color-scheme: dark;
     }
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.45 system-ui, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
-  header { display: flex; align-items: center; gap: 24px; padding: 0 20px; height: 56px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
-  header h1 { font-size: 15px; margin: 0; letter-spacing: .2px; }
-  nav { display: flex; gap: 4px; height: 100%; }
-  nav button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 0 12px; cursor: pointer; }
-  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
-  .status { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
-  .dot.on { background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
-  main { max-width: 1280px; margin: 0 auto; padding: 20px; }
-  .view { display: none; } .view.active { display: block; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-  label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-  input[type=text], input[type=number], textarea, select { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
-  textarea { resize: vertical; min-height: 64px; }
-  input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-  button.btn { font: inherit; font-weight: 600; border-radius: 6px; padding: 7px 14px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
-  button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  @media (prefers-color-scheme: dark) { button.btn.primary { color: #0f1115; } }
-  button.btn:disabled { opacity: .5; cursor: default; }
-  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-  .row > * { flex: 1 1 160px; }
-  .row > .shrink { flex: 0 0 auto; }
-  .check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); font-weight: 500; margin: 0; white-space: nowrap; }
-  .counters { display: flex; gap: 28px; flex-wrap: wrap; }
-  .counter b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
-  .counter span { color: var(--muted); font-size: 12px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
-  td { padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  td.domain { font-family: var(--mono); width: 100%; white-space: normal; word-break: break-all; }
-  td.domain a { color: var(--text); text-decoration: none; }
-  td.domain a:hover { color: var(--accent); text-decoration: underline; }
-  td.muted { color: var(--muted); }
-  tr.fresh td { animation: flash 1.2s ease-out; }
-  @keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
-  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: var(--bad-soft); color: var(--muted); }
-  .badge.new { background: var(--new-soft); color: var(--new); }
-  .badge.good { background: var(--good-soft); color: var(--good); }
-  .badge.warn { background: var(--warn-soft); color: var(--warn); }
-  .table-wrap { max-height: calc(100vh - 330px); min-height: 300px; overflow: auto; border-top: 1px solid var(--line); margin: 12px -16px -16px; }
-  .empty { padding: 40px; text-align: center; color: var(--muted); }
-  a.small { font-size: 12px; color: var(--accent); }
+  :root[data-theme="dark"] {
+    --ink: #e9eaec; --ink-2: #a8afba; --ink-3: #7d8592;
+    --surface: #0f1115; --sunken: #15181e;
+    --line: #262b33; --line-strong: #363c46;
+    --ok: #4ade80; --ok-bg: #10231a; --warn: #e8c56a; --warn-bg: #241f10;
+    --danger: #f87171; --danger-bg: #2a1416; --info: #7fb3e8; --info-bg: #111d2b;
+    color-scheme: dark;
+  }
 
-  /* Name finder */
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
-  .tld-picks { display: flex; flex-wrap: wrap; gap: 6px; }
-  .tld-picks label { margin: 0; display: inline-flex; gap: 4px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-family: var(--mono); color: var(--text); font-weight: 500; cursor: pointer; }
-  .tld-picks input:checked + span { color: var(--accent); font-weight: 700; }
-  .results { display: flex; flex-direction: column; }
-  .name-row { display: grid; grid-template-columns: minmax(160px, 260px) 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-  .name-row:last-child { border-bottom: 0; }
-  .name-row .nm { font-family: var(--mono); font-weight: 700; font-size: 15px; }
-  .name-row .why { color: var(--muted); font-size: 12px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
-  .chip { position: relative; font-family: var(--mono); font-size: 12px; border-radius: 6px; padding: 4px 8px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); }
-  .chip.available { background: var(--good-soft); border-color: transparent; color: var(--good); font-weight: 700; cursor: pointer; }
-  .chip.likely-available { background: var(--warn-soft); border-color: transparent; color: var(--warn); font-weight: 700; cursor: pointer; }
-  .chip.registered { text-decoration: line-through; }
-  .chip.pending { opacity: .6; }
-  .buy { display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 10; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; min-width: 170px; box-shadow: 0 8px 24px rgba(0,0,0,.15); font-family: system-ui, sans-serif; }
-  .chip.open .buy { display: block; }
-  .buy a { display: block; padding: 5px 8px; border-radius: 4px; color: var(--text); text-decoration: none; font-weight: 500; }
-  .buy a:hover { background: var(--accent-soft); }
-  .buy .hint { font-size: 11px; color: var(--muted); padding: 4px 8px; font-weight: 400; }
-  .notice { padding: 8px 12px; border-radius: 6px; background: var(--warn-soft); color: var(--warn); margin-bottom: 12px; font-size: 13px; }
-  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
-  .check-result { margin-top: 12px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface); color: var(--ink); font: 14px/1.5 var(--sans); }
+  h1, h2, h3 { margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+  p { margin: 0; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  .icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .icon--sm { width: 13px; height: 13px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* app frame */
+  .app { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: 100vh; }
+  .rail { position: sticky; top: 0; height: 100vh; border-right: 1px solid var(--line); background: var(--sunken); padding: 18px 14px; display: flex; flex-direction: column; gap: 2px; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 15px; margin: 0 6px 20px; letter-spacing: -0.01em; }
+  .brand svg { width: 22px; height: 22px; }
+  .rail__group { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); margin: 12px 8px 6px; }
+  .nav { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px; background: none; color: var(--ink-2); font-weight: 600; font-size: 13px; cursor: pointer; text-align: left; }
+  .nav:hover { color: var(--ink); }
+  .nav.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(16, 20, 28, .06); }
+  .nav .n { margin-left: auto; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--info-bg); color: var(--info); font-variant-numeric: tabular-nums; }
+  .nav .n:empty { display: none; }
+  .rail__foot { margin-top: auto; padding: 12px 8px 0; border-top: 1px solid var(--line); display: grid; gap: 10px; font-size: 12px; color: var(--ink-3); }
+  .rail__foot b { display: block; color: var(--ink); font-size: 12.5px; font-weight: 600; }
+  .theme { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); width: max-content; }
+  .theme button { display: grid; place-items: center; width: 28px; height: 24px; border: 0; border-radius: 5px; background: none; color: var(--ink-3); cursor: pointer; }
+  .theme button.on { background: var(--sunken); color: var(--ink); }
+
+  .main { padding: 28px 32px 48px; min-width: 0; }
+  .view { display: none; gap: 26px; align-content: start; }
+  .view.on { display: grid; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+  .head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 24px; align-items: start; }
+  .big { font-size: 40px; font-weight: 800; letter-spacing: -0.035em; line-height: 1; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .head h2 { font-size: 24px; margin-top: 6px; }
+  .lede { color: var(--ink-2); font-size: 14px; margin-top: 6px; max-width: 66ch; }
+  .meta { color: var(--ink-3); font-size: 13px; margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .live { display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 600; font-size: 12px; }
+  .live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .live.off { color: var(--ink-3); }
+  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+  .btn { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 12.5px; padding: 8px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--sunken); color: var(--ink); cursor: pointer; white-space: nowrap; text-decoration: none; }
+  .btn:hover { border-color: var(--line-strong); }
+  .btn--primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  .btn--primary:hover { border-color: var(--ink); opacity: .9; }
+  .btn--ghost { background: transparent; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.on { border-color: var(--ink); }
+
+  .search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 10px 0 12px; min-width: 320px; background: var(--surface); color: var(--ink-3); }
+  .search:focus-within { border-color: var(--ink); }
+  .search input { flex: 1; border: 0; outline: 0; background: none; padding: 8px 0; font-size: 13px; color: var(--ink); min-width: 0; }
+  .search input::placeholder { color: var(--ink-3); }
+  kbd { font: 600 10.5px var(--sans); color: var(--ink-3); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+
+  .facts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .facts > div { padding: 16px 18px 16px 0; min-width: 0; }
+  .facts > div + div { border-left: 1px solid var(--line); padding-left: 20px; }
+  .facts b { display: block; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .facts span { display: block; font-size: 12px; color: var(--ink-3); margin-top: 3px; }
+
+  .drawer { border: 1px solid var(--line); border-radius: 10px; background: var(--sunken); padding: 16px 18px; }
+  .fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 130px; gap: 14px; }
+  .field label, .label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+  .field input, .field textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); padding: 8px 10px; font-size: 13px; outline: 0; }
+  .field input:focus, .field textarea:focus { border-color: var(--ink); }
+  .field textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
+  .drawer__foot { display: flex; align-items: center; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); cursor: pointer; user-select: none; }
+  .toggle input { accent-color: var(--ink); width: 15px; height: 15px; margin: 0; }
+  .hint { font-size: 12px; color: var(--ink-3); }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 0 36px; align-items: start; }
+  .sec { display: grid; gap: 4px; align-content: start; min-width: 0; }
+  .sec__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 10px; flex-wrap: wrap; }
+  .sec__head h3 { font-size: 15px; }
+  .sec__head > span { color: var(--ink-3); font-size: 12.5px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chips button { font-weight: 600; font-size: 12px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink-2); cursor: pointer; }
+  .chips button.on { border-color: var(--ink); color: var(--ink); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); padding: 12px 12px 8px 0; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); position: sticky; top: 0; z-index: 1; }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .muted { color: var(--ink-3); }
+  .sub { display: block; font-size: 11.5px; color: var(--ink-3); }
+  td.time { color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; width: 1%; }
+  td.dom { word-break: break-all; }
+  td.dom a { color: var(--ink); text-decoration: none; }
+  td.dom a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  td.issuer { color: var(--ink-2); white-space: nowrap; width: 1%; }
+  td.reg { white-space: nowrap; width: 1%; }
+  td.act { width: 1%; padding-right: 0; }
+  .rowlink { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; color: var(--ink-3); }
+  .rowlink:hover { background: var(--sunken); color: var(--ink); }
+  tr.arrive td { animation: arrive 1.4s ease-out; }
+  @keyframes arrive { from { background: var(--info-bg); } to { background: transparent; } }
+  .scroll { max-height: 640px; overflow: auto; }
+  .empty { padding: 28px 0; color: var(--ink-3); font-size: 13px; }
+  .skel td { color: transparent; }
+  .skel i { display: block; height: 10px; border-radius: 3px; background: var(--sunken); }
+
+  .pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; border: 1px solid var(--line-strong); color: var(--ink-2); white-space: nowrap; background: none; }
+  .pill--ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+  .pill--warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+  .pill--info { background: var(--info-bg); color: var(--info); border-color: var(--info); }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+
+  .chart { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 8px; margin-bottom: 24px; }
+  .chart__head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+  .chart__head b { font-size: 13px; }
+  .legend { display: flex; gap: 12px; font-size: 11.5px; color: var(--ink-3); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .chart svg text { font: 10px var(--sans); fill: var(--ink-3); }
+  .stripe { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .stripe::before { content: ""; width: 3px; height: 28px; border-radius: 2px; background: var(--ok); flex: none; }
+  .stripe.older::before { background: var(--line-strong); }
+  .stripe a { color: var(--ink); text-decoration: none; word-break: break-all; }
+  .stripe a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .stripe .when { margin-left: auto; text-align: right; white-space: nowrap; font-size: 11.5px; color: var(--ink-3); }
+  .stripe .when b { display: block; color: var(--ink); font-weight: 600; font-size: 12.5px; }
+  .logs { margin-top: 24px; }
+  .logrow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
+  .logrow .dot { background: var(--ok); }
+  .logrow.bad .dot { background: var(--danger); }
+  .logrow span:last-child { margin-left: auto; color: var(--ink-3); font-size: 11.5px; }
+
+  /* name finder */
+  .brief { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 24px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+  .brief .wide { grid-column: 1 / -1; }
+  .tlds { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tlds label { cursor: pointer; position: relative; }
+  .tlds input { position: absolute; opacity: 0; pointer-events: none; }
+  .tlds span { display: inline-block; font: 500 12px var(--mono); padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); color: var(--ink-3); }
+  .tlds input:checked + span { border-color: var(--ink); color: var(--ink); background: var(--sunken); }
+  .tlds input:focus-visible + span { outline: 2px solid var(--info); outline-offset: 1px; }
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; padding: 2px; gap: 2px; }
+  .seg button { border: 0; background: none; padding: 6px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); cursor: pointer; display: inline-flex; gap: 7px; align-items: center; }
+  .seg button.on { background: var(--sunken); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+  .brief__foot { grid-column: 1 / -1; display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+  .brief__foot .field input { width: 80px; }
+  .brief__foot .hint { align-self: center; }
+
+  .notice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border: 1px solid var(--warn); background: var(--warn-bg); color: var(--warn); border-radius: 8px; font-size: 13px; margin: 10px 0 4px; }
+  .notice .icon { margin-top: 2px; }
+
+  .names th.tld, .names td.tld { width: 1%; white-space: nowrap; }
+  .names td.nm b { font: 600 14px var(--mono); }
+  .cell { position: relative; }
+  .avail { cursor: pointer; }
+  .avail .icon { width: 11px; height: 11px; }
+  .taken { color: var(--ink-3); font-size: 12px; }
+  .wait { display: inline-block; width: 46px; height: 8px; border-radius: 3px; background: linear-gradient(90deg, var(--sunken), var(--line), var(--sunken)); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; vertical-align: middle; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .menu { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; min-width: 230px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; padding: 6px; box-shadow: 0 12px 32px rgba(16, 20, 28, .14); display: none; white-space: normal; }
+  .cell.open .menu { display: block; }
+  .menu__head { padding: 6px 8px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .menu__head b { font: 600 12.5px var(--mono); display: block; }
+  .menu a { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 8px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 500; }
+  .menu a:hover { background: var(--sunken); }
+  .menu a .icon { color: var(--ink-3); width: 13px; height: 13px; }
+  .lookup { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; }
+  .lookup .mono { font-size: 14px; font-weight: 600; }
+  .lookup .cell .menu { left: 0; right: auto; }
+
+  @media (prefers-reduced-motion: reduce) { tr.arrive td, .wait { animation: none; } }
+  @media (max-width: 1100px) {
+    .two { grid-template-columns: 1fr; gap: 28px; }
+    .facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .facts > div:nth-child(4) { border-left: 0; padding-left: 0; }
+    .facts > div:nth-child(n+4) { border-top: 1px solid var(--line); }
+  }
+  @media (max-width: 820px) {
+    .app { grid-template-columns: 1fr; }
+    .rail { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--line); gap: 4px; }
+    .brand { margin: 0 8px 0 0; }
+    .rail__group, .rail__status { display: none; }
+    .nav { width: auto; }
+    .rail__foot { margin: 0 0 0 auto; padding: 0; border: 0; }
+    .main { padding: 20px 16px 40px; }
+    .head { grid-template-columns: 1fr; }
+    .actions { justify-content: flex-start; }
+    .search { min-width: 0; flex: 1 1 100%; }
+    .fields, .brief { grid-template-columns: 1fr; }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .facts > div:nth-child(n) { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+    .facts > div:nth-child(even) { border-left: 1px solid var(--line); padding-left: 16px; }
+    .facts > div:nth-child(-n+2) { border-top: 0; }
+    td.issuer, th.issuer { display: none; }
+    .big { font-size: 34px; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Cert Stream Viewer</h1>
-  <nav>
-    <button class="active" data-view="feed">Live feed</button>
-    <button data-view="names">Name finder</button>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-feed" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-names" viewBox="0 0 24 24"><path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14"/><path d="M15 5v14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-cert" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="13" rx="1.5"/><path d="M8 8h8"/><path d="M8 11h5"/><path d="m9 16-1 5 3-1.5 3 1.5-1-5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+  <symbol id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4"/><path d="M12 17v.01"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="m6.5 6.5 2 2M15.5 15.5l2 2M6.5 17.5l2-2M15.5 8.5l2-2"/></symbol>
+  <symbol id="i-rule" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/></symbol>
+</svg>
+
+<div class="app">
+  <nav class="rail" aria-label="Sections">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M7.5 12.5h2.5l1.5-4 2 7 1.5-3h1.5"/></svg>
+      Cert Stream
+    </div>
+    <span class="rail__group">Watch</span>
+    <button class="nav on" data-view="feed"><svg class="icon"><use href="#i-feed"/></svg>Live feed<span class="n" id="navNew"></span></button>
+    <span class="rail__group">Find</span>
+    <button class="nav" data-view="names"><svg class="icon"><use href="#i-names"/></svg>Name finder</button>
+    <div class="rail__foot">
+      <div class="rail__status"><b id="footStatus">Connecting</b><span id="footLogs">CT logs</span></div>
+      <div class="theme" role="group" aria-label="Theme">
+        <button data-theme-set="light" title="Light"><svg class="icon icon--sm"><use href="#i-sun"/></svg></button>
+        <button data-theme-set="auto" title="Match system"><svg class="icon icon--sm"><use href="#i-auto"/></svg></button>
+        <button data-theme-set="dark" title="Dark"><svg class="icon icon--sm"><use href="#i-moon"/></svg></button>
+      </div>
+    </div>
   </nav>
-  <div class="status"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
-</header>
 
-<main>
-  <!-- LIVE FEED -->
-  <section class="view active" id="feed">
-    <div class="panel">
-      <div class="row">
-        <div><label for="fTlds">TLDs (blank = all)</label><input type="text" id="fTlds" placeholder="com, io, ai"></div>
-        <div><label for="fInclude">Domain contains</label><input type="text" id="fInclude" placeholder="shop, ai, crypto"></div>
-        <div><label for="fExclude">Exclude</label><input type="text" id="fExclude" placeholder="test, staging"></div>
-        <div class="shrink" style="flex-basis:110px"><label for="fMaxAge">"New" = ≤ days</label><input type="number" id="fMaxAge" min="1" value="30"></div>
-        <label class="check shrink"><input type="checkbox" id="fLookup" checked> Look up registration date</label>
-        <button class="btn shrink" id="saveFilters">Apply</button>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="row" style="align-items:center">
-        <div class="counters" style="flex:1 1 auto">
-          <div class="counter"><b id="cCerts">0</b><span>certificates read</span></div>
-          <div class="counter"><b id="cDomains">0</b><span>unique domains</span></div>
-          <div class="counter"><b id="cMatched">0</b><span>matched filters</span></div>
-          <div class="counter"><b id="cNew">0</b><span>newly registered</span></div>
+  <main class="main">
+    <!-- Live feed -->
+    <section class="view on" id="feed" aria-labelledby="feedTitle">
+      <div class="head">
+        <div>
+          <span class="eyebrow" id="feedTitle">Live feed · Certificate Transparency</span>
+          <div class="big" id="bigNew">0</div>
+          <div class="meta">
+            <span>Newly registered domains seen this session</span>
+            <span class="live off" id="liveTag">Connecting</span>
+          </div>
         </div>
-        <label class="check shrink"><input type="checkbox" id="onlyNew"> Only newly registered</label>
-        <div class="shrink" style="flex-basis:200px"><input type="text" id="search" placeholder="Search feed…"></div>
-        <button class="btn shrink" id="pauseBtn">Pause view</button>
-        <button class="btn shrink" id="toggleStream">Stop stream</button>
+        <div class="actions">
+          <label class="search"><svg class="icon"><use href="#i-search"/></svg><span class="sr">Filter the feed</span><input id="feedSearch" type="text" placeholder="Filter the feed by domain" autocomplete="off"><kbd>/</kbd></label>
+          <button class="btn" id="filtersBtn" aria-expanded="false"><svg class="icon"><use href="#i-filter"/></svg>Filters</button>
+          <button class="btn" id="pauseBtn"><svg class="icon"><use href="#i-pause"/></svg><span>Pause</span></button>
+          <button class="btn btn--ghost" id="streamBtn"><svg class="icon"><use href="#i-stop"/></svg><span>Stop stream</span></button>
+        </div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Seen</th><th>Domain</th><th>Registered</th><th>Issuer</th><th></th></tr></thead>
-          <tbody id="feedBody"></tbody>
+
+      <div class="drawer" id="drawer" hidden>
+        <div class="fields">
+          <div class="field"><label for="fTlds">Extensions</label><input id="fTlds" type="text" placeholder="All extensions"></div>
+          <div class="field"><label for="fInclude">Domain contains</label><input id="fInclude" type="text" placeholder="shop, pay, labs"></div>
+          <div class="field"><label for="fExclude">Exclude</label><input id="fExclude" type="text" placeholder="test, staging"></div>
+          <div class="field"><label for="fMaxAge">New within (days)</label><input id="fMaxAge" type="number" min="1" value="30"></div>
+        </div>
+        <div class="drawer__foot">
+          <label class="toggle"><input type="checkbox" id="fLookup" checked> Look up each domain's registration date</label>
+          <span class="hint">Comma-separated. Applies to domains arriving from now on.</span>
+          <button class="btn btn--primary" id="applyFilters" style="margin-left:auto">Apply filters</button>
+        </div>
+      </div>
+
+      <div class="facts">
+        <div><b id="fCerts">0</b><span>Certificates read</span></div>
+        <div><b id="fDomains">0</b><span>Unique domains</span></div>
+        <div><b id="fMatched">0</b><span>Matched your filters</span></div>
+        <div><b id="fRate">0</b><span>Domains in the last minute</span></div>
+        <div><b id="fLogs">0 / 0</b><span>CT logs answering</span></div>
+      </div>
+
+      <div class="two">
+        <div class="sec">
+          <div class="sec__head">
+            <h3>Domains as they get certificates</h3>
+            <div class="chips" role="group" aria-label="Show">
+              <button class="on" data-show="all">All</button>
+              <button data-show="new">Newly registered</button>
+            </div>
+          </div>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>Seen</th><th>Domain</th><th>Registered</th><th class="issuer">Issuer</th><th><span class="sr">Links</span></th></tr></thead>
+              <tbody id="feedBody">
+                <tr class="skel"><td><i style="width:56px"></i></td><td><i style="width:60%"></i></td><td><i style="width:70px"></i></td><td class="issuer"><i style="width:90px"></i></td><td></td></tr>
+                <tr class="skel"><td><i style="width:56px"></i></td><td><i style="width:45%"></i></td><td><i style="width:70px"></i></td><td class="issuer"><i style="width:80px"></i></td><td></td></tr>
+                <tr class="skel"><td><i style="width:56px"></i></td><td><i style="width:52%"></i></td><td><i style="width:70px"></i></td><td class="issuer"><i style="width:96px"></i></td><td></td></tr>
+              </tbody>
+            </table>
+            <p class="empty" id="feedEmpty" hidden>Nothing here matches yet. Clear the filter or wait for more arrivals.</p>
+          </div>
+        </div>
+
+        <aside class="sec">
+          <div class="chart">
+            <div class="chart__head"><b>Arrivals, last 5 minutes</b>
+              <div class="legend"><span><i style="background: var(--line-strong)"></i>Domains</span><span><i style="background: var(--ok)"></i>Newly registered</span></div>
+            </div>
+            <svg id="chart" viewBox="0 0 320 96" width="100%" height="96" role="img" aria-label="Domains arriving per 10 seconds over the last 5 minutes"></svg>
+          </div>
+
+          <div class="sec__head"><h3>Fresh registrations</h3><span id="freshNote">Registered within 30 days</span></div>
+          <div id="fresh"><p class="empty">Registration dates are looked up as domains arrive. Fresh ones collect here.</p></div>
+
+          <div class="logs">
+            <div class="sec__head"><h3>Sources</h3><span>Logs Chrome trusts today</span></div>
+            <div id="logList"></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Name finder -->
+    <section class="view" id="names" aria-labelledby="namesTitle">
+      <div class="head">
+        <div>
+          <span class="eyebrow">Name finder</span>
+          <h2 id="namesTitle">Find a name with an open domain</h2>
+          <p class="lede">Describe the company and list a few brands you like. Each idea is checked against the registry for every extension you pick, and open ones link straight to a registrar.</p>
+        </div>
+        <div class="actions">
+          <label class="search"><svg class="icon"><use href="#i-search"/></svg><span class="sr">Check one domain</span><input id="lookupInput" type="text" placeholder="Check one domain, then Enter" autocomplete="off"><kbd>/</kbd></label>
+        </div>
+      </div>
+
+      <div class="lookup" id="lookup" hidden></div>
+
+      <form class="brief" id="brief">
+        <div class="field"><label for="seed">Names you like</label><input id="seed" type="text" placeholder="Stripe, Loom, Linear"></div>
+        <div class="field"><label for="style">Tone or theme</label><input id="style" type="text" placeholder="Short and calm, one invented word"></div>
+        <div class="field wide"><label for="desc">What the company does</label><textarea id="desc" placeholder="Invoicing for freelance designers: send a quote, turn it into an invoice, get paid by card or bank transfer."></textarea></div>
+        <div class="wide"><span class="label">Extensions</span><div class="tlds" id="tlds"></div></div>
+        <div class="brief__foot">
+          <div><span class="label">Generator</span>
+            <div class="seg" role="group" aria-label="Generator">
+              <button type="button" data-engine="claude"><svg class="icon icon--sm"><use href="#i-spark"/></svg>Claude</button>
+              <button type="button" data-engine="classic"><svg class="icon icon--sm"><use href="#i-rule"/></svg>Built-in rules</button>
+            </div>
+          </div>
+          <div class="field"><label for="count">Ideas</label><input id="count" type="number" value="30" min="5" max="80"></div>
+          <button class="btn btn--primary" id="generate" type="submit"><svg class="icon"><use href="#i-search"/></svg>Generate and check</button>
+          <span class="hint">Claude needs ANTHROPIC_API_KEY on the server. Built-in rules work offline.</span>
+        </div>
+      </form>
+
+      <div class="sec" id="resultsSec" hidden>
+        <div class="sec__head">
+          <h3 id="resultsTitle">Results</h3>
+          <div class="chips" role="group" aria-label="Show">
+            <button class="on" data-names="all">All names</button>
+            <button data-names="open">With an open domain</button>
+          </div>
+        </div>
+        <div id="warning"></div>
+        <table class="names">
+          <thead id="namesHead"></thead>
+          <tbody id="namesBody"></tbody>
         </table>
-        <div class="empty" id="feedEmpty">Waiting for certificates…</div>
+        <p class="hint" style="margin-top:14px">
+          <span class="pill pill--ok">Open</span>&nbsp; the registry has no record of it.&nbsp;&nbsp;
+          <span class="pill pill--warn">Likely open</span>&nbsp; this extension has no registry lookup and DNS shows nothing, so confirm at checkout. Premium names can cost more than the standard price.
+        </p>
       </div>
-    </div>
-  </section>
-
-  <!-- NAME FINDER -->
-  <section class="view" id="names">
-    <div class="panel">
-      <div class="grid2">
-        <div>
-          <label for="seed">Names you like</label>
-          <input type="text" id="seed" placeholder="e.g. Stripe, Notion, Loom">
-        </div>
-        <div>
-          <label for="style">Theme / style (optional)</label>
-          <input type="text" id="style" placeholder="e.g. playful, one word, sounds Japanese, nature-inspired">
-        </div>
-      </div>
-      <div style="margin-top:12px">
-        <label for="desc">What does your company / product do?</label>
-        <textarea id="desc" placeholder="e.g. An app that helps freelancers track invoices and get paid faster"></textarea>
-      </div>
-      <div style="margin-top:12px">
-        <label>Extensions to check</label>
-        <div class="tld-picks" id="tldPicks"></div>
-      </div>
-      <div class="row" style="margin-top:14px">
-        <div class="shrink" style="flex-basis:260px">
-          <label for="engine">Generator</label>
-          <select id="engine">
-            <option value="claude">Claude (creative, needs API key)</option>
-            <option value="classic">Built-in (instant, offline)</option>
-          </select>
-        </div>
-        <div class="shrink" style="flex-basis:100px"><label for="count">How many</label><input type="number" id="count" value="40" min="5" max="80"></div>
-        <button class="btn primary shrink" id="generate">Generate &amp; check</button>
-        <label class="check shrink"><input type="checkbox" id="onlyAvail"> Only show names with an open domain</label>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="row">
-        <div><label for="manual">Check a specific domain</label><input type="text" id="manual" placeholder="mycoolstartup.com"></div>
-        <button class="btn shrink" id="manualBtn">Check</button>
-      </div>
-      <div class="check-result" id="manualResult"></div>
-    </div>
-
-    <div class="panel" id="resultsPanel" hidden>
-      <div class="row" style="align-items:center;margin-bottom:8px">
-        <div style="flex:1 1 auto"><b id="resultsTitle">Results</b></div>
-        <div class="legend shrink">
-          <span><span class="badge good">available</span> click to buy</span>
-          <span><span class="badge warn">likely</span> no RDAP; DNS says unused</span>
-          <span><span class="badge">taken</span></span>
-        </div>
-      </div>
-      <div id="warning"></div>
-      <div class="results" id="results"></div>
-    </div>
-  </section>
-</main>
+    </section>
+  </main>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const fmt = n => n.toLocaleString();
+const fmt = n => Number(n || 0).toLocaleString();
+const icon = (id, cls = 'icon') => `<svg class="${cls}"><use href="#i-${id}"/></svg>`;
+const store = {
+  get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+};
 
-// ---------- tabs ----------
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
-  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === b.dataset.view));
-  try { localStorage.setItem('tab', b.dataset.view); } catch {}
+// Navigation and theme
+function showView(name) {
+  document.querySelectorAll('.nav').forEach(b => b.classList.toggle('on', b.dataset.view === name));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === name));
+  store.set('view', name);
+}
+document.querySelectorAll('.nav').forEach(b => b.onclick = () => showView(b.dataset.view));
+if (store.get('view') === 'names') showView('names');
+
+function setTheme(mode) {
+  if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.dataset.theme = mode;
+  document.querySelectorAll('[data-theme-set]').forEach(b => b.classList.toggle('on', b.dataset.themeSet === mode));
+  store.set('theme', mode);
+}
+document.querySelectorAll('[data-theme-set]').forEach(b => b.onclick = () => setTheme(b.dataset.themeSet));
+setTheme(store.get('theme') || 'auto');
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.cell.open').forEach(c => c.classList.remove('open'));
+  if (e.key !== '/' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  e.preventDefault();
+  ($('names').classList.contains('on') ? $('lookupInput') : $('feedSearch')).focus();
 });
-try { const t = localStorage.getItem('tab'); if (t) document.querySelector(`nav button[data-view="${t}"]`)?.click(); } catch {}
 
-// ---------- live feed ----------
+// Live feed
 const MAX_ROWS = 500;
-const rows = new Map(); // domain -> { item, tr }
-let paused = false;
-let streamRunning = true;
+const rows = new Map();   // domain -> { item, tr }
+const arrivals = [];      // { t, domain, isNew } for the chart and rate
+const freshItems = [];
+let paused = false, running = true, showOnlyNew = false, newCount = 0;
 
-function ageCell(item) {
+function relAge(days) {
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 60) return `${days} days ago`;
+  if (days < 730) return `${Math.round(days / 30)} months ago`;
+  return `${Math.round(days / 365)} years ago`;
+}
+
+function regCell(item) {
   switch (item.age) {
-    case 'pending': return '<span class="badge">checking…</span>';
-    case 'skipped': return '<span class="badge" title="Lookup skipped: too many queued">—</span>';
-    case 'off': return '';
-    case 'unknown': return '<span class="badge">unknown</span>';
-    case 'known': {
-      const d = item.ageDays;
-      const label = d === 0 ? 'today' : d < 60 ? `${d}d ago` : d < 730 ? `${Math.round(d / 30)}mo ago` : `${Math.round(d / 365)}y ago`;
-      return `<span class="badge ${item.isNew ? 'new' : ''}" title="${esc(item.created)}">${item.isNew ? 'NEW · ' : ''}${label}</span>`;
-    }
+    case 'pending': return '<span class="wait" aria-label="Looking up"></span>';
+    case 'known': return item.isNew
+      ? `<span class="pill pill--info" title="${esc(item.created)}">New · ${relAge(item.ageDays)}</span>`
+      : `<span class="muted" title="${esc(item.created)}">${relAge(item.ageDays)}</span>`;
+    case 'skipped': return '<span class="muted" title="Skipped while the lookup queue was full">Not checked</span>';
+    case 'unknown': return '<span class="muted">Unknown</span>';
+    default: return '';
   }
-  return '';
 }
 
 function visible(item) {
-  if ($('onlyNew').checked && !item.isNew) return false;
-  const q = $('search').value.trim().toLowerCase();
+  if (showOnlyNew && !item.isNew) return false;
+  const q = $('feedSearch').value.trim().toLowerCase();
   return !q || item.domain.includes(q);
 }
 
-function renderRow(item, fresh) {
+function buildRow(item, fresh) {
   const tr = document.createElement('tr');
-  if (fresh) tr.className = 'fresh';
+  if (fresh) tr.className = 'arrive';
   tr.innerHTML = `
-    <td class="muted">${new Date(item.seenAt).toLocaleTimeString()}</td>
-    <td class="domain"><a href="https://${esc(item.domain)}" target="_blank" rel="noopener noreferrer">${esc(item.domain)}</a></td>
-    <td class="age">${ageCell(item)}</td>
-    <td class="muted">${esc(item.issuer)}</td>
-    <td><a class="small" href="https://crt.sh/?q=${encodeURIComponent(item.domain)}" target="_blank" rel="noopener noreferrer">certs</a></td>`;
+    <td class="time">${new Date(item.seenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+    <td class="dom mono"><a href="https://${esc(item.domain)}" target="_blank" rel="noopener noreferrer">${esc(item.domain)}</a></td>
+    <td class="reg">${regCell(item)}</td>
+    <td class="issuer">${esc(item.issuer)}</td>
+    <td class="act"><a class="rowlink" href="https://crt.sh/?q=${encodeURIComponent(item.domain)}" target="_blank" rel="noopener noreferrer" title="Certificate history on crt.sh">${icon('cert')}</a></td>`;
   tr.hidden = !visible(item);
   return tr;
 }
 
+function updateEmpty() {
+  $('feedEmpty').hidden = rows.size === 0 || [...rows.values()].some(r => !r.tr.hidden);
+}
+
 function addItem(item, fresh = true) {
   if (rows.has(item.domain)) return;
-  const tr = renderRow(item, fresh);
+  document.querySelectorAll('#feedBody .skel').forEach(r => r.remove());
+  const tr = buildRow(item, fresh);
   rows.set(item.domain, { item, tr });
+  if (fresh) arrivals.push({ t: Date.now(), domain: item.domain, isNew: false });
   if (!paused) $('feedBody').prepend(tr);
   if (rows.size > MAX_ROWS) {
     const [oldest, { tr: old }] = rows.entries().next().value;
     old.remove();
     rows.delete(oldest);
   }
-  $('feedEmpty').hidden = true;
+  if (item.isNew) addFresh(item);
 }
 
-function applyView() {
+function applyVisibility() {
   for (const { item, tr } of rows.values()) tr.hidden = !visible(item);
+  updateEmpty();
 }
-$('onlyNew').onchange = applyView;
-$('search').oninput = applyView;
+$('feedSearch').oninput = applyVisibility;
+document.querySelectorAll('[data-show]').forEach(b => b.onclick = () => {
+  showOnlyNew = b.dataset.show === 'new';
+  document.querySelectorAll('[data-show]').forEach(x => x.classList.toggle('on', x === b));
+  applyVisibility();
+});
 
 $('pauseBtn').onclick = () => {
   paused = !paused;
-  $('pauseBtn').textContent = paused ? 'Resume view' : 'Pause view';
+  $('pauseBtn').innerHTML = paused ? `${icon('play')}<span>Resume</span>` : `${icon('pause')}<span>Pause</span>`;
+  $('pauseBtn').classList.toggle('on', paused);
   if (!paused) {
     const body = $('feedBody');
     body.innerHTML = '';
@@ -277,41 +532,99 @@ $('pauseBtn').onclick = () => {
   }
 };
 
-$('toggleStream').onclick = async () => {
-  const url = streamRunning ? '/api/feed/stop' : '/api/feed/start';
-  const res = await fetch(url, { method: 'POST' });
-  if (!res.ok) { const e = await res.json(); alert(e.error); return; }
+$('streamBtn').onclick = async () => {
+  const res = await fetch(running ? '/api/feed/stop' : '/api/feed/start', { method: 'POST' });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || 'Request failed'); }
   refreshStats();
 };
 
+$('filtersBtn').onclick = () => {
+  const open = $('drawer').hidden;
+  $('drawer').hidden = !open;
+  $('filtersBtn').classList.toggle('on', open);
+  $('filtersBtn').setAttribute('aria-expanded', open);
+};
+
+function addFresh(item) {
+  if (freshItems.some(f => f.domain === item.domain)) return;
+  freshItems.unshift(item);
+  freshItems.length = Math.min(freshItems.length, 12);
+  newCount++;
+  $('bigNew').textContent = fmt(newCount);
+  $('navNew').textContent = newCount;
+  const a = arrivals.find(x => x.domain === item.domain);
+  if (a) a.isNew = true;
+  $('fresh').innerHTML = freshItems.map(f => `
+    <div class="stripe${f.ageDays > 7 ? ' older' : ''}">
+      <a class="mono" href="https://${esc(f.domain)}" target="_blank" rel="noopener noreferrer">${esc(f.domain)}</a>
+      <span class="when"><b>${relAge(f.ageDays)}</b>${esc(new Date(f.created).toLocaleDateString([], { month: 'short', day: 'numeric' }))}</span>
+    </div>`).join('');
+}
+
+// Arrivals chart: 30 buckets of 10 seconds
+function drawChart() {
+  const now = Date.now(), span = 300000, buckets = 30, w = 320, h = 96, top = 6, base = 80, left = 28;
+  while (arrivals.length && arrivals[0].t < now - span) arrivals.shift();
+  const all = new Array(buckets).fill(0), fresh = new Array(buckets).fill(0);
+  for (const a of arrivals) {
+    const i = Math.min(buckets - 1, Math.floor((a.t - (now - span)) / (span / buckets)));
+    all[i]++;
+    if (a.isNew) fresh[i]++;
+  }
+  const max = Math.max(4, ...all);
+  const bw = (w - left) / buckets;
+  const mid = (top + base) / 2;
+  let svg = `<g stroke="var(--line)" stroke-width="1"><line x1="${left}" y1="${top}" x2="${w}" y2="${top}"/><line x1="${left}" y1="${mid}" x2="${w}" y2="${mid}"/><line x1="${left}" y1="${base}" x2="${w}" y2="${base}"/></g>`;
+  svg += `<text x="0" y="${top + 4}">${max}</text><text x="0" y="${base + 3}">0</text>`;
+  all.forEach((n, i) => {
+    const x = left + i * bw + 1, bh = (n / max) * (base - top), fh = (fresh[i] / max) * (base - top);
+    if (n) svg += `<rect x="${x.toFixed(1)}" y="${(base - bh).toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${bh.toFixed(1)}" rx="1" fill="var(--line-strong)"><title>${n} domains</title></rect>`;
+    if (fresh[i]) svg += `<rect x="${x.toFixed(1)}" y="${(base - Math.max(2, fh)).toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${Math.max(2, fh).toFixed(1)}" rx="1" fill="var(--ok)"/>`;
+  });
+  svg += `<text x="${left}" y="${h - 2}">5 min ago</text><text x="${w}" y="${h - 2}" text-anchor="end">now</text>`;
+  $('chart').innerHTML = svg;
+  $('fRate').textContent = fmt(arrivals.filter(a => a.t > now - 60000).length);
+}
+setInterval(drawChart, 2000);
+drawChart();
+
 function connectFeed() {
   const es = new EventSource('/api/feed');
-  es.addEventListener('backlog', e => JSON.parse(e.data).forEach(i => addItem(i, false)));
+  es.addEventListener('backlog', e => {
+    const items = JSON.parse(e.data);
+    items.forEach(i => addItem(i, false));
+    updateEmpty();
+  });
   es.addEventListener('domain', e => addItem(JSON.parse(e.data)));
   es.addEventListener('age', e => {
     const a = JSON.parse(e.data);
     const row = rows.get(a.domain);
     if (!row) return;
     Object.assign(row.item, a);
-    row.tr.querySelector('.age').innerHTML = ageCell(row.item);
+    row.tr.querySelector('.reg').innerHTML = regCell(row.item);
     row.tr.hidden = !visible(row.item);
+    if (row.item.isNew) addFresh(row.item);
   });
-  es.onerror = () => { $('statusText').textContent = 'Disconnected — retrying…'; $('dot').classList.remove('on'); };
+  es.onerror = () => { $('liveTag').textContent = 'Reconnecting'; $('liveTag').classList.add('off'); };
 }
 connectFeed();
 
 async function refreshStats() {
   try {
     const s = await (await fetch('/api/feed/stats')).json();
-    streamRunning = s.running;
-    $('cCerts').textContent = fmt(s.certs);
-    $('cDomains').textContent = fmt(s.domains);
-    $('cMatched').textContent = fmt(s.matched);
-    $('cNew').textContent = fmt(s.newlyRegistered);
-    $('dot').classList.toggle('on', s.running);
+    running = s.running;
     const healthy = s.logs.filter(l => l.healthy).length;
-    $('statusText').textContent = s.running ? `Streaming ${healthy}/${s.logs.length} CT logs` : 'Stream stopped';
-    $('toggleStream').textContent = s.running ? 'Stop stream' : 'Start stream';
+    $('fCerts').textContent = fmt(s.certs);
+    $('fDomains').textContent = fmt(s.domains);
+    $('fMatched').textContent = fmt(s.matched);
+    $('fLogs').textContent = `${healthy} / ${s.logs.length}`;
+    $('liveTag').textContent = running ? `Live · ${healthy} logs` : 'Stopped';
+    $('liveTag').classList.toggle('off', !running);
+    $('footStatus').textContent = running ? 'Streaming' : 'Stopped';
+    $('footLogs').textContent = `${healthy} of ${s.logs.length} CT logs`;
+    $('streamBtn').innerHTML = running ? `${icon('stop')}<span>Stop stream</span>` : `${icon('play')}<span>Start stream</span>`;
+    $('logList').innerHTML = s.logs.map(l => `
+      <div class="logrow${l.healthy ? '' : ' bad'}"><span class="dot"></span>${esc(l.name.replace(/^.*?'(.+)'.*$/, '$1'))}<span>${esc(l.operator)}</span></div>`).join('');
   } catch {}
 }
 refreshStats();
@@ -324,10 +637,13 @@ async function loadFilters() {
   $('fExclude').value = f.exclude.join(', ');
   $('fMaxAge').value = f.maxAgeDays;
   $('fLookup').checked = f.lookupAge;
+  $('freshNote').textContent = `Registered within ${f.maxAgeDays} days`;
+  const active = f.tlds.length + f.include.length + f.exclude.length;
+  $('filtersBtn').innerHTML = `${icon('filter')}Filters${active ? ` · ${active}` : ''}`;
 }
 loadFilters();
 
-$('saveFilters').onclick = async () => {
+$('applyFilters').onclick = async () => {
   await fetch('/api/filters', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -335,117 +651,143 @@ $('saveFilters').onclick = async () => {
       maxAgeDays: $('fMaxAge').value, lookupAge: $('fLookup').checked,
     }),
   });
-  $('saveFilters').textContent = 'Applied ✓';
-  setTimeout(() => $('saveFilters').textContent = 'Apply', 1200);
+  await loadFilters();
+  $('drawer').hidden = true;
+  $('filtersBtn').classList.remove('on');
+  $('filtersBtn').setAttribute('aria-expanded', 'false');
 };
 
-// ---------- name finder ----------
+// Name finder
 const TLDS = ['com', 'io', 'ai', 'co', 'app', 'dev', 'net', 'org', 'xyz', 'so', 'gg', 'tech'];
-const DEFAULT_TLDS = ['com', 'io', 'ai', 'co'];
-$('tldPicks').innerHTML = TLDS.map(t =>
-  `<label><input type="checkbox" value="${t}" ${DEFAULT_TLDS.includes(t) ? 'checked' : ''} hidden><span>.${t}</span></label>`).join('');
+const savedTlds = (store.get('tlds') || 'com,io,ai,co').split(',');
+$('tlds').innerHTML = TLDS.map(t => `<label><input type="checkbox" value="${t}" ${savedTlds.includes(t) ? 'checked' : ''}><span>.${t}</span></label>`).join('');
+const pickedTlds = () => [...document.querySelectorAll('#tlds input:checked')].map(i => i.value);
+$('tlds').onchange = () => store.set('tlds', pickedTlds().join(','));
 
-// small client-side concurrency pool for availability checks
+let engine = 'claude';
+function setEngine(e) {
+  engine = e;
+  document.querySelectorAll('[data-engine]').forEach(b => b.classList.toggle('on', b.dataset.engine === e));
+  store.set('engine', e);
+}
+document.querySelectorAll('[data-engine]').forEach(b => b.onclick = () => setEngine(b.dataset.engine));
+setEngine(store.get('engine') || 'claude');
+
 function pool(limit) {
-  let active = 0; const q = [];
-  const next = () => { if (active >= limit || !q.length) return; active++; const { fn, res } = q.shift(); fn().then(res).finally(() => { active--; next(); }); };
+  let active = 0;
+  const q = [];
+  const next = () => {
+    if (active >= limit || !q.length) return;
+    active++;
+    const { fn, res } = q.shift();
+    fn().then(res, () => res(null)).finally(() => { active--; next(); });
+  };
   return fn => new Promise(res => { q.push({ fn, res }); next(); });
 }
 const checkPool = pool(6);
-let runId = 0;
+const check = async domain => (await fetch('/api/check/' + encodeURIComponent(domain))).json();
+let runId = 0, namesFilter = 'all';
 
-function chipHTML(domain, r) {
-  const status = r ? r.status : 'pending';
-  const cls = { available: 'available', 'likely-available': 'likely-available', registered: 'registered', unknown: 'unknown', pending: 'pending' }[status] || 'unknown';
-  let title = status;
-  if (r?.created) title = `Registered ${new Date(r.created).toLocaleDateString()}`;
-  let menu = '';
-  if (r && (status === 'available' || status === 'likely-available')) {
-    menu = `<div class="buy">${status === 'likely-available' ? '<div class="hint">Not confirmed — verify at checkout</div>' : ''}
-      ${r.links.map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">Buy on ${esc(l.name)} ↗</a>`).join('')}</div>`;
+function statusCell(domain, r) {
+  if (!r) return '<span class="wait" aria-label="Checking"></span>';
+  if (r.status === 'available' || r.status === 'likely-available') {
+    const likely = r.status === 'likely-available';
+    return `<button type="button" class="pill ${likely ? 'pill--warn' : 'pill--ok'} avail" aria-haspopup="true">${likely ? 'Likely open' : 'Open'}${icon('chev')}</button>
+      <div class="menu" role="menu">
+        <div class="menu__head"><b>${esc(domain)}</b><span class="sub">${likely ? 'Not confirmed by a registry. Check at checkout.' : 'Unregistered. Pick a registrar:'}</span></div>
+        ${r.links.map(l => `<a role="menuitem" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.name)}${icon('ext')}</a>`).join('')}
+      </div>`;
   }
-  return `<span class="chip ${cls}" data-domain="${esc(domain)}" title="${esc(title)}">${esc(domain)}${menu}</span>`;
+  if (r.status === 'registered') {
+    const year = r.created ? new Date(r.created).getFullYear() : '';
+    return `<span class="taken" title="${r.created ? 'Registered ' + esc(new Date(r.created).toLocaleDateString()) : 'Registered'}">Taken${year ? ` · ${year}` : ''}</span>`;
+  }
+  return `<span class="taken" title="${esc(r.error || '')}">No answer</span>`;
 }
 
 document.addEventListener('click', e => {
-  const chip = e.target.closest('.chip.available, .chip.likely-available');
-  document.querySelectorAll('.chip.open').forEach(c => c !== chip && c.classList.remove('open'));
-  if (chip && !e.target.closest('.buy')) chip.classList.toggle('open');
+  const trigger = e.target.closest('.avail');
+  const cell = trigger && trigger.closest('.cell');
+  document.querySelectorAll('.cell.open').forEach(c => { if (c !== cell) c.classList.remove('open'); });
+  if (cell) cell.classList.toggle('open');
 });
 
-async function check(domain) {
-  const res = await fetch('/api/check/' + encodeURIComponent(domain));
-  return res.json();
+function rowVisibility(tr) {
+  tr.hidden = namesFilter === 'open' && !tr.querySelector('.wait') && !tr.querySelector('.avail');
 }
+document.querySelectorAll('[data-names]').forEach(b => b.onclick = () => {
+  namesFilter = b.dataset.names;
+  document.querySelectorAll('[data-names]').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('#namesBody tr').forEach(rowVisibility);
+});
 
-function updateRowVisibility(row) {
-  const open = row.querySelector('.chip.available, .chip.likely-available');
-  const done = !row.querySelector('.chip.pending');
-  row.hidden = $('onlyAvail').checked && done && !open;
-}
-$('onlyAvail').onchange = () => document.querySelectorAll('.name-row').forEach(updateRowVisibility);
-
-$('generate').onclick = async () => {
-  const tlds = [...document.querySelectorAll('#tldPicks input:checked')].map(i => i.value);
-  if (!tlds.length) return alert('Pick at least one extension');
+$('brief').onsubmit = async e => {
+  e.preventDefault();
+  const tlds = pickedTlds();
+  if (!tlds.length) { alert('Pick at least one extension.'); return; }
+  if (!$('seed').value.trim() && !$('desc').value.trim()) { $('desc').focus(); return; }
   const btn = $('generate');
-  btn.disabled = true; btn.textContent = 'Generating…';
   const myRun = ++runId;
-  $('resultsPanel').hidden = false;
-  $('results').innerHTML = '<div class="empty">Coming up with names…</div>';
+  btn.disabled = true;
+  btn.innerHTML = `${icon('spark')}Thinking of names`;
+  $('resultsSec').hidden = false;
   $('warning').innerHTML = '';
+  $('resultsTitle').textContent = 'Generating';
+  $('namesHead').innerHTML = `<tr><th>Name</th>${tlds.map(t => `<th class="tld">.${t}</th>`).join('')}</tr>`;
+  $('namesBody').innerHTML = [38, 52, 30, 46, 34].map(w =>
+    `<tr class="skel"><td><i style="width:${w}%"></i></td>${tlds.map(() => '<td class="tld"><i style="width:46px"></i></td>').join('')}</tr>`).join('');
   try {
     const res = await fetch('/api/names', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ seed: $('seed').value, description: $('desc').value, style: $('style').value, engine: $('engine').value, count: $('count').value }),
+      body: JSON.stringify({ seed: $('seed').value, description: $('desc').value, style: $('style').value, engine, count: $('count').value }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    if (data.warning) $('warning').innerHTML = `<div class="notice">${esc(data.warning)}</div>`;
-    $('resultsTitle').textContent = `${data.names.length} names × ${tlds.length} extensions`;
-    $('results').innerHTML = data.names.map(n => `
-      <div class="name-row">
-        <div><div class="nm">${esc(n.name)}</div><div class="why">${esc(n.rationale)}</div></div>
-        <div class="chips">${tlds.map(t => chipHTML(`${n.name}.${t}`)).join('')}</div>
-      </div>`).join('');
-    btn.textContent = 'Checking availability…';
-    const jobs = [];
-    for (const chip of document.querySelectorAll('#results .chip')) {
-      const domain = chip.dataset.domain;
-      jobs.push(checkPool(() => check(domain)).then(r => {
+    if (myRun !== runId) return;
+    if (data.warning) $('warning').innerHTML = `<div class="notice">${icon('warn')}<span>${esc(data.warning)}</span></div>`;
+    $('namesBody').innerHTML = data.names.map(n => `
+      <tr><td class="nm"><b>${esc(n.name)}</b><span class="sub">${esc(n.rationale)}</span></td>
+      ${tlds.map(t => `<td class="tld cell" data-domain="${esc(n.name)}.${t}">${statusCell()}</td>`).join('')}</tr>`).join('');
+    $('resultsTitle').textContent = `${data.names.length} names · checking ${data.names.length * tlds.length} domains`;
+    btn.innerHTML = `${icon('search')}Checking domains`;
+    let open = 0, likely = 0;
+    await Promise.all([...document.querySelectorAll('#namesBody td.cell')].map(td =>
+      checkPool(() => check(td.dataset.domain)).then(r => {
         if (myRun !== runId) return;
-        const fresh = document.createElement('div');
-        fresh.innerHTML = chipHTML(domain, r);
-        const row = chip.closest('.name-row');
-        chip.replaceWith(fresh.firstElementChild);
-        updateRowVisibility(row);
-      }));
-    }
-    await Promise.all(jobs);
+        td.innerHTML = statusCell(td.dataset.domain, r);
+        if (r?.status === 'available') open++;
+        if (r?.status === 'likely-available') likely++;
+        rowVisibility(td.closest('tr'));
+      })));
     if (myRun === runId) {
-      const open = document.querySelectorAll('#results .chip.available').length;
-      const likely = document.querySelectorAll('#results .chip.likely-available').length;
-      $('resultsTitle').textContent = `${data.names.length} names · ${open} available${likely ? ` · ${likely} likely available` : ''}`;
+      $('resultsTitle').textContent = `${data.names.length} names · ${open} open${likely ? ` · ${likely} likely open` : ''}`;
     }
   } catch (err) {
-    $('results').innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    $('namesBody').innerHTML = '';
+    $('warning').innerHTML = `<div class="notice">${icon('warn')}<span>${esc(err.message)}</span></div>`;
+    $('resultsTitle').textContent = 'Results';
   } finally {
-    if (myRun === runId) { btn.disabled = false; btn.textContent = 'Generate & check'; }
+    if (myRun === runId) { btn.disabled = false; btn.innerHTML = `${icon('search')}Generate and check`; }
   }
 };
 
-$('manualBtn').onclick = async () => {
-  let d = $('manual').value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+$('lookupInput').onkeydown = async e => {
+  if (e.key !== 'Enter') return;
+  let d = e.target.value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   if (!d) return;
   if (!d.includes('.')) d += '.com';
-  $('manualResult').innerHTML = '<span class="badge">checking…</span>';
+  $('lookup').hidden = false;
+  $('lookup').innerHTML = `<span class="mono">${esc(d)}</span><span class="wait"></span>`;
   const r = await check(d);
-  if (r.error) { $('manualResult').innerHTML = `<span class="badge">${esc(r.error)}</span>`; return; }
-  const label = { available: 'Available', 'likely-available': 'Likely available (unconfirmed)', registered: 'Taken', unknown: 'Unknown' }[r.status];
-  $('manualResult').innerHTML = `${chipHTML(d, r)} <span class="muted" style="margin-left:8px">${label}${r.created ? ` · registered ${new Date(r.created).toLocaleDateString()}` : ''}${r.expires ? ` · expires ${new Date(r.expires).toLocaleDateString()}` : ''}</span>
-    · <a class="small" href="${esc(r.certsUrl)}" target="_blank" rel="noopener noreferrer">certificate history</a>`;
+  if (!r.status) { $('lookup').innerHTML = `<span class="mono">${esc(d)}</span><span class="muted">${esc(r.error || 'Lookup failed')}</span>`; return; }
+  const detail = [
+    r.created && `Registered ${new Date(r.created).toLocaleDateString()}`,
+    r.expires && `expires ${new Date(r.expires).toLocaleDateString()}`,
+  ].filter(Boolean).join(', ');
+  $('lookup').innerHTML = `<span class="mono">${esc(d)}</span><span class="cell">${statusCell(d, r)}</span>
+    ${detail ? `<span class="muted">${esc(detail)}</span>` : ''}
+    <a class="btn btn--ghost" style="margin-left:auto" href="${esc(r.certsUrl)}" target="_blank" rel="noopener noreferrer">${icon('cert')}Certificate history</a>`;
 };
-$('manual').onkeydown = e => { if (e.key === 'Enter') $('manualBtn').click(); };
 </script>
 </body>
 </html>
